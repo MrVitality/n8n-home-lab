@@ -1,0 +1,469 @@
+services:
+  n8n:
+    image: n8nio/n8n:2.3.0
+    restart: unless-stopped
+    environment:
+      - N8N_HOST=${N8N_HOST}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - NODE_ENV=production
+      - WEBHOOK_URL=https://${N8N_HOST}/
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
+      - TZ=${GENERIC_TIMEZONE}
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=supabase-db
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
+      - DB_POSTGRESDB_USER=${POSTGRES_USER}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
+      - EXECUTIONS_MODE=queue
+      - QUEUE_BULL_REDIS_HOST=redis
+      - QUEUE_BULL_REDIS_PORT=6379
+      - QUEUE_HEALTH_CHECK_ACTIVE=true
+      - N8N_ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - N8N_USER_MANAGEMENT_JWT_SECRET=${N8N_USER_MANAGEMENT_JWT_SECRET}
+      - N8N_RUNNERS_ENABLED=true
+      - N8N_RUNNERS_MODE=external
+      - N8N_RUNNERS_AUTH_TOKEN=${N8N_RUNNERS_SECRET}
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
+      - OLLAMA_HOST=${OLLAMA_HOST}
+      - N8N_PROXY_HOPS=1
+    volumes:
+      - n8n_data:/home/node/.n8n
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5678/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - dokploy-network
+      - n8n-n8nrunnerpostgresollama-yumfxq
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+        reservations:
+          memory: 512M
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.n8n-web.rule=Host(`automations.manixsystems.cloud`)
+      - traefik.http.routers.n8n-web.entrypoints=web
+      - traefik.http.routers.n8n-web.middlewares=redirect-to-https@file
+      - traefik.http.routers.n8n-websecure.rule=Host(`automations.manixsystems.cloud`)
+      - traefik.http.routers.n8n-websecure.entrypoints=websecure
+      - traefik.http.routers.n8n-websecure.tls.certresolver=letsencrypt
+      - traefik.http.services.n8n.loadbalancer.server.port=5678
+
+  n8n-worker:
+    image: n8nio/n8n:2.3.0
+    restart: unless-stopped
+    environment:
+      - N8N_HOST=${N8N_HOST}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - NODE_ENV=production
+      - WEBHOOK_URL=https://${N8N_HOST}/
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
+      - TZ=${GENERIC_TIMEZONE}
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=supabase-db
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
+      - DB_POSTGRESDB_USER=${POSTGRES_USER}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
+      - EXECUTIONS_MODE=queue
+      - QUEUE_BULL_REDIS_HOST=redis
+      - QUEUE_BULL_REDIS_PORT=6379
+      - QUEUE_HEALTH_CHECK_ACTIVE=true
+      - N8N_ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - N8N_USER_MANAGEMENT_JWT_SECRET=${N8N_USER_MANAGEMENT_JWT_SECRET}
+      - N8N_RUNNERS_ENABLED=true
+      - N8N_RUNNERS_MODE=external
+      - N8N_RUNNERS_AUTH_TOKEN=${N8N_RUNNERS_SECRET}
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
+      - OLLAMA_HOST=${OLLAMA_HOST}
+    command: worker
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      n8n:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      supabase-db:
+        condition: service_healthy
+    networks:
+      - dokploy-network
+      - n8n-n8nrunnerpostgresollama-yumfxq
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+        reservations:
+          memory: 384M
+
+  n8n-runner:
+    image: n8nio/runners:latest
+    restart: unless-stopped
+    environment:
+      - N8N_RUNNERS_TASK_BROKER_URI=http://n8n:5679
+      - N8N_RUNNERS_AUTH_TOKEN=${N8N_RUNNERS_SECRET}
+      - N8N_ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
+      - N8N_RUNNERS_MAX_CONCURRENCY=30
+      - N8N_RUNNERS_TASK_TIMEOUT=300
+      - N8N_RUNNERS_HEALTH_CHECK_PORT=5680
+      - N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=60
+      - NODE_OPTIONS=--max-old-space-size=768
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5680/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      n8n:
+        condition: service_healthy
+    networks:
+      - dokploy-network
+      - n8n-n8nrunnerpostgresollama-yumfxq
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+        reservations:
+          memory: 256M
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama_storage:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - dokploy-network
+      - n8n-n8nrunnerpostgresollama-yumfxq
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_storage:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - n8n-n8nrunnerpostgresollama-yumfxq
+    deploy:
+      resources:
+        limits:
+          memory: 200M
+        reservations:
+          memory: 64M
+
+  supabase-db:
+    image: supabase/postgres:15.6.1.145
+    hostname: supabase-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
+      JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      JWT_EXP: "3600"
+    command:
+      - postgres
+      - -c
+      - listen_addresses=*
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - effective_cache_size=512MB
+      - -c
+      - maintenance_work_mem=64MB
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - wal_buffers=16MB
+      - -c
+      - default_statistics_target=100
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=200
+      - -c
+      - work_mem=16MB
+      - -c
+      - min_wal_size=256MB
+      - -c
+      - max_wal_size=512MB
+      - -c
+      - max_connections=100
+      - -c
+      - max_parallel_workers_per_gather=1
+      - -c
+      - max_parallel_workers=2
+      - -c
+      - log_min_duration_statement=1000
+      - -c
+      - idle_in_transaction_session_timeout=60000
+    volumes:
+      - supabase_db_data:/var/lib/postgresql/data
+      - ./volumes/db/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h localhost -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - n8n-n8nrunnerpostgresollama-yumfxq
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 384M
+
+  supabase-rest:
+    image: postgrest/postgrest:v12.2.3
+    restart: unless-stopped
+    environment:
+      PGRST_DB_URI: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@supabase-db:5432/postgres
+      PGRST_DB_SCHEMAS: public,storage,graphql_public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      PGRST_APP_SETTINGS_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      PGRST_APP_SETTINGS_JWT_EXP: "3600"
+      PGRST_DB_POOL: "10"
+      PGRST_DB_POOL_ACQUISITION_TIMEOUT: "10"
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    networks:
+      - n8n-n8nrunnerpostgresollama-yumfxq
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 64M
+
+  supabase-auth:
+    image: supabase/gotrue:v2.164.0
+    restart: unless-stopped
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: "9999"
+      API_EXTERNAL_URL: https://${SUPABASE_API_HOST}
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@supabase-db:5432/postgres?search_path=auth
+      GOTRUE_SITE_URL: ${SUPABASE_SITE_URL}
+      GOTRUE_URI_ALLOW_LIST: ""
+      GOTRUE_DISABLE_SIGNUP: ${SUPABASE_DISABLE_SIGNUP}
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: "3600"
+      GOTRUE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: "false"
+      GOTRUE_MAILER_AUTOCONFIRM: ${SUPABASE_MAILER_AUTOCONFIRM}
+      GOTRUE_SMTP_HOST: ${SMTP_HOST}
+      GOTRUE_SMTP_PORT: ${SMTP_PORT}
+      GOTRUE_SMTP_USER: ${SMTP_USER}
+      GOTRUE_SMTP_PASS: ${SMTP_PASS}
+      GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_USER}
+      GOTRUE_SMTP_MAX_FREQUENCY: 1ns
+      GOTRUE_MAILER_URLPATHS_INVITE: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /auth/v1/verify
+      GOTRUE_RATE_LIMIT_HEADER: X-Forwarded-For
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    networks:
+      - n8n-n8nrunnerpostgresollama-yumfxq
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 64M
+
+  supabase-meta:
+    image: supabase/postgres-meta:v0.84.2
+    restart: unless-stopped
+    environment:
+      PG_META_PORT: "8080"
+      PG_META_DB_HOST: supabase-db
+      PG_META_DB_PORT: "5432"
+      PG_META_DB_NAME: postgres
+      PG_META_DB_USER: ${POSTGRES_USER}
+      PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    networks:
+      - n8n-n8nrunnerpostgresollama-yumfxq
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 64M
+
+  supabase-kong:
+    image: kong:2.8.1
+    restart: unless-stopped
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /home/kong/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_PLUGINS: request-transformer,cors,key-auth,acl,basic-auth
+      KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
+      KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+    volumes:
+      - ./volumes/kong/kong.yml:/home/kong/kong.yml:ro
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    networks:
+      - dokploy-network
+      - n8n-n8nrunnerpostgresollama-yumfxq
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.supabase-api-web.rule=Host(`${SUPABASE_API_HOST}`)
+      - traefik.http.routers.supabase-api-web.entrypoints=web
+      - traefik.http.routers.supabase-api-web.middlewares=redirect-to-https@file
+      - traefik.http.routers.supabase-api-websecure.rule=Host(`${SUPABASE_API_HOST}`)
+      - traefik.http.routers.supabase-api-websecure.entrypoints=websecure
+      - traefik.http.routers.supabase-api-websecure.tls.certresolver=letsencrypt
+      - traefik.http.services.supabase-api.loadbalancer.server.port=8000
+
+  supabase-studio:
+    image: supabase/studio:20241202-71e5240
+    restart: unless-stopped
+    environment:
+      STUDIO_PG_META_URL: http://supabase-meta:8080
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DEFAULT_ORGANIZATION_NAME: Default Organization
+      DEFAULT_PROJECT_NAME: Default Project
+      SUPABASE_URL: https://${SUPABASE_API_HOST}
+      SUPABASE_PUBLIC_URL: https://${SUPABASE_API_HOST}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      NEXT_PUBLIC_ENABLE_LOGS: "true"
+      NEXT_ANALYTICS_BACKEND_PROVIDER: postgres
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    networks:
+      - dokploy-network
+      - n8n-n8nrunnerpostgresollama-yumfxq
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.supabase-studio-web.rule=Host(`${SUPABASE_STUDIO_HOST}`)
+      - traefik.http.routers.supabase-studio-web.entrypoints=web
+      - traefik.http.routers.supabase-studio-web.middlewares=redirect-to-https@file
+      - traefik.http.routers.supabase-studio-websecure.rule=Host(`${SUPABASE_STUDIO_HOST}`)
+      - traefik.http.routers.supabase-studio-websecure.entrypoints=websecure
+      - traefik.http.routers.supabase-studio-websecure.tls.certresolver=letsencrypt
+      - traefik.http.services.supabase-studio.loadbalancer.server.port=3000
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    restart: unless-stopped
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - WEBUI_SECRET_KEY=${OPENWEBUI_SECRET_KEY}
+      - ENABLE_SIGNUP=true
+      - ENABLE_LOGIN_FORM=true
+      - DEFAULT_MODELS=llama3.2:latest
+      - WEBUI_NAME=ManixSystems AI
+    volumes:
+      - open_webui_data:/app/backend/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - dokploy-network
+      - n8n-n8nrunnerpostgresollama-yumfxq
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.openwebui-web.rule=Host(`openwebui.manixsystems.cloud`)
+      - traefik.http.routers.openwebui-web.entrypoints=web
+      - traefik.http.routers.openwebui-web.middlewares=redirect-to-https@file
+      - traefik.http.routers.openwebui-websecure.rule=Host(`openwebui.manixsystems.cloud`)
+      - traefik.http.routers.openwebui-websecure.entrypoints=websecure
+      - traefik.http.routers.openwebui-websecure.tls.certresolver=letsencrypt
+      - traefik.http.services.openwebui.loadbalancer.server.port=8080
+
+volumes:
+  n8n_data:
+  supabase_db_data:
+  ollama_storage:
+  redis_storage:
+  open_webui_data:
+
+networks:
+  dokploy-network:
+    external: true
+  n8n-n8nrunnerpostgresollama-yumfxq:
+    name: n8n-n8nrunnerpostgresollama-yumfxq
+    external: true
