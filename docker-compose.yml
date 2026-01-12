@@ -168,9 +168,7 @@ services:
   # N8N RUNNER - Sandboxed code execution for Code nodes
   # ===========================================================================
   n8n-runner:
-    build:
-      context: .
-      dockerfile: n8n-runner.Dockerfile
+    image: n8nio/runners:latest
     restart: unless-stopped
     <<: *security-opts
     logging: *default-logging
