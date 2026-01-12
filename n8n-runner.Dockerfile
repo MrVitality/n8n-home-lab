@@ -1,6 +1,6 @@
+cat <<EOF > n8n-runner.Dockerfile
 FROM n8nio/runners:latest
 USER root
-RUN apt-get update && apt-get install -y python3-pip && rm -rf /var/lib/apt/lists/*
-# To add specific packages, uncomment and modify the line below:
-# RUN pip3 install pandas --break-system-packages
+RUN apk add --no-cache python3 py3-pip
 USER node
+EOF
