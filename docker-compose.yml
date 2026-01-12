@@ -8,12 +8,12 @@
 # TOTAL MEMORY BUDGET: ~14GB (leaves ~2GB for OS/buffers)
 #
 # MEMORY ALLOCATION:
-#   - Ollama:         6144MB (for larger models like llama3.2, codellama)
+#   - Ollama:         5120MB (reduced to allow more for Open WebUI)
 #   - PostgreSQL:     2048MB (2GB shared_buffers + overhead)
+#   - Open WebUI:     2048MB (increased for RAG embedding model)
 #   - n8n main:       1536MB
 #   - n8n worker:     1024MB
 #   - n8n runner:      768MB
-#   - Open WebUI:     1024MB
 #   - Supabase Studio: 768MB
 #   - Kong:            512MB
 #   - Redis:           384MB
@@ -59,7 +59,7 @@ services:
       - DB_TYPE=postgresdb
       - DB_POSTGRESDB_HOST=supabase-db
       - DB_POSTGRESDB_PORT=5432
-      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
+      - DB_POSTGRESDB_DATABASE=postgres
       - DB_POSTGRESDB_USER=${POSTGRES_USER}
       - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
       - DB_POSTGRESDB_POOL_SIZE=10
@@ -88,7 +88,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 30s
+      start_period: 120s
     depends_on:
       supabase-db:
         condition: service_healthy
@@ -100,27 +100,18 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.5'
+          cpus: "1.5"
           memory: 1536M
         reservations:
           memory: 512M
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.n8n-web.rule=Host(`automations.manixsystems.cloud`)
-      - traefik.http.routers.n8n-web.entrypoints=web
-      - traefik.http.routers.n8n-web.service=n8n-svc
-      - traefik.http.routers.n8n-web.middlewares=redirect-to-https@file
-      - traefik.http.routers.n8n-websecure.rule=Host(`automations.manixsystems.cloud`)
-      - traefik.http.routers.n8n-websecure.entrypoints=websecure
-      - traefik.http.routers.n8n-websecure.service=n8n-svc
-      - traefik.http.routers.n8n-websecure.tls.certresolver=letsencrypt
-      - traefik.http.services.n8n-svc.loadbalancer.server.port=5678
 
   # ===========================================================================
   # N8N WORKER - Processes queued workflow executions
   # ===========================================================================
   n8n-worker:
-    image: n8nio/n8n:latest
+    build:
+      context: .
+      dockerfile: n8n-worker.Dockerfile
     restart: unless-stopped
     <<: *security-opts
     logging: *default-logging
@@ -136,7 +127,7 @@ services:
       - DB_TYPE=postgresdb
       - DB_POSTGRESDB_HOST=supabase-db
       - DB_POSTGRESDB_PORT=5432
-      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
+      - DB_POSTGRESDB_DATABASE=postgres
       - DB_POSTGRESDB_USER=${POSTGRES_USER}
       - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
       - DB_POSTGRESDB_POOL_SIZE=8
@@ -175,7 +166,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.0'
+          cpus: "1.0"
           memory: 1024M
         reservations:
           memory: 384M
@@ -184,7 +175,9 @@ services:
   # N8N RUNNER - Sandboxed code execution for Code nodes
   # ===========================================================================
   n8n-runner:
-    image: n8nio/runners:latest
+    build:
+      context: .
+      dockerfile: n8n-runner.Dockerfile
     restart: unless-stopped
     <<: *security-opts
     logging: *default-logging
@@ -213,7 +206,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.0'
+          cpus: "1.0"
           memory: 768M
         reservations:
           memory: 256M
@@ -247,8 +240,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '3.0'
-          memory: 6144M
+          cpus: "3.0"
+          memory: 5120M
         reservations:
           memory: 2048M
     labels:
@@ -263,14 +256,7 @@ services:
     <<: *security-opts
     logging: *default-logging
     command: >
-      redis-server
-      --maxmemory 256mb
-      --maxmemory-policy allkeys-lru
-      --appendonly yes
-      --appendfsync everysec
-      --save ""
-      --tcp-keepalive 300
-      --timeout 0
+      redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --appendonly yes --appendfsync everysec --save "" --tcp-keepalive 300 --timeout 0
     volumes:
       - redis_storage:/data
     healthcheck:
@@ -283,7 +269,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
+          cpus: "0.5"
           memory: 384M
         reservations:
           memory: 128M
@@ -346,7 +332,6 @@ services:
       - huge_pages=try
     volumes:
       - supabase_db_data:/var/lib/postgresql/data
-      - ./volumes/db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -h localhost -U ${POSTGRES_USER}" ]
       interval: 5s
@@ -357,7 +342,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2.0'
+          cpus: "2.0"
           memory: 2048M
         reservations:
           memory: 768M
@@ -388,7 +373,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
+          cpus: "0.5"
           memory: 192M
         reservations:
           memory: 64M
@@ -406,7 +391,7 @@ services:
       GOTRUE_API_PORT: "9999"
       API_EXTERNAL_URL: https://${SUPABASE_API_HOST}
       GOTRUE_DB_DRIVER: postgres
-      GOTRUE_DB_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@supabase-db:5432/postgres?search_path=auth
+      GOTRUE_DB_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@supabase-db:5432/postgres
       GOTRUE_SITE_URL: ${SUPABASE_SITE_URL}
       GOTRUE_URI_ALLOW_LIST: ""
       GOTRUE_DISABLE_SIGNUP: ${SUPABASE_DISABLE_SIGNUP}
@@ -436,7 +421,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
+          cpus: "0.5"
           memory: 192M
         reservations:
           memory: 64M
@@ -464,7 +449,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
+          cpus: "0.5"
           memory: 192M
         reservations:
           memory: 64M
@@ -487,17 +472,17 @@ services:
       - /bin/sh
       - -c
       - |
-        cat > /home/kong/kong.yml << KONGEOF
+        cat > /home/kong/kong.yml << 'KONGEOF'
         _format_version: "2.1"
         _transform: true
 
         consumers:
           - username: anon
             keyauth_credentials:
-              - key: $${SUPABASE_ANON_KEY}
+              - key: ${SUPABASE_ANON_KEY}
           - username: service_role
             keyauth_credentials:
-              - key: $${SUPABASE_SERVICE_KEY}
+              - key: ${SUPABASE_SERVICE_ROLE_KEY}
 
         acls:
           - consumer: anon
@@ -587,24 +572,20 @@ services:
     networks:
       - dokploy-network
       - n8n-n8nrunnerpostgresollama-yumfxq
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=dokploy-network
+      - traefik.http.routers.supabase-api.rule=Host(`api.supabase.manixsystems.cloud`)
+      - traefik.http.routers.supabase-api.entrypoints=websecure
+      - traefik.http.routers.supabase-api.tls.certresolver=letsencrypt
+      - traefik.http.services.supabase-api.loadbalancer.server.port=8000
     deploy:
       resources:
         limits:
-          cpus: '1.0'
+          cpus: "1.0"
           memory: 512M
         reservations:
           memory: 192M
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.supabase-api-web.rule=Host(`${SUPABASE_API_HOST}`)
-      - traefik.http.routers.supabase-api-web.entrypoints=web
-      - traefik.http.routers.supabase-api-web.service=supabase-api-svc
-      - traefik.http.routers.supabase-api-web.middlewares=redirect-to-https@file
-      - traefik.http.routers.supabase-api-websecure.rule=Host(`${SUPABASE_API_HOST}`)
-      - traefik.http.routers.supabase-api-websecure.entrypoints=websecure
-      - traefik.http.routers.supabase-api-websecure.service=supabase-api-svc
-      - traefik.http.routers.supabase-api-websecure.tls.certresolver=letsencrypt
-      - traefik.http.services.supabase-api-svc.loadbalancer.server.port=8000
 
   # ===========================================================================
   # SUPABASE STUDIO - Admin dashboard
@@ -630,27 +611,28 @@ services:
     depends_on:
       supabase-db:
         condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "true" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     networks:
       - dokploy-network
       - n8n-n8nrunnerpostgresollama-yumfxq
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=dokploy-network"
+      - "traefik.http.routers.supabase-studio.rule=Host(`supabase.manixsystems.cloud`)"
+      - "traefik.http.routers.supabase-studio.entrypoints=websecure"
+      - "traefik.http.routers.supabase-studio.tls.certresolver=letsencrypt"
+      - "traefik.http.services.supabase-studio.loadbalancer.server.port=3000"
     deploy:
       resources:
         limits:
-          cpus: '1.0'
+          cpus: "1.0"
           memory: 768M
         reservations:
           memory: 256M
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.supabase-studio-web.rule=Host(`${SUPABASE_STUDIO_HOST}`)
-      - traefik.http.routers.supabase-studio-web.entrypoints=web
-      - traefik.http.routers.supabase-studio-web.service=supabase-studio-svc
-      - traefik.http.routers.supabase-studio-web.middlewares=redirect-to-https@file
-      - traefik.http.routers.supabase-studio-websecure.rule=Host(`${SUPABASE_STUDIO_HOST}`)
-      - traefik.http.routers.supabase-studio-websecure.entrypoints=websecure
-      - traefik.http.routers.supabase-studio-websecure.service=supabase-studio-svc
-      - traefik.http.routers.supabase-studio-websecure.tls.certresolver=letsencrypt
-      - traefik.http.services.supabase-studio-svc.loadbalancer.server.port=3000
 
   # ===========================================================================
   # OPEN WEBUI - Chat interface for Ollama
@@ -688,24 +670,20 @@ services:
     networks:
       - dokploy-network
       - n8n-n8nrunnerpostgresollama-yumfxq
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=dokploy-network
+      - traefik.http.routers.open-webui.rule=Host(`openwebui.manixsystems.cloud`)
+      - traefik.http.routers.open-webui.entrypoints=websecure
+      - traefik.http.routers.open-webui.tls.certresolver=letsencrypt
+      - traefik.http.services.open-webui.loadbalancer.server.port=8080
     deploy:
       resources:
         limits:
-          cpus: '1.0'
-          memory: 1024M
+          cpus: "1.0"
+          memory: 2048M
         reservations:
-          memory: 384M
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.openwebui-web.rule=Host(`openwebui.manixsystems.cloud`)
-      - traefik.http.routers.openwebui-web.entrypoints=web
-      - traefik.http.routers.openwebui-web.service=openwebui-svc
-      - traefik.http.routers.openwebui-web.middlewares=redirect-to-https@file
-      - traefik.http.routers.openwebui-websecure.rule=Host(`openwebui.manixsystems.cloud`)
-      - traefik.http.routers.openwebui-websecure.entrypoints=websecure
-      - traefik.http.routers.openwebui-websecure.service=openwebui-svc
-      - traefik.http.routers.openwebui-websecure.tls.certresolver=letsencrypt
-      - traefik.http.services.openwebui-svc.loadbalancer.server.port=8080
+          memory: 512M
 
   # ===========================================================================
   # SEARXNG - Privacy-respecting metasearch engine
@@ -724,7 +702,7 @@ services:
       - /bin/sh
       - -c
       - |
-        cat > /etc/searxng/settings.yml << SETTINGSEOF
+        cat > /etc/searxng/settings.yml << 'SETTINGSEOF'
         use_default_settings: true
 
         general:
@@ -746,6 +724,7 @@ services:
           image_proxy: true
           method: "POST"
           http_protocol_version: "1.1"
+          bind_address: "0.0.0.0:8080"
 
         ui:
           static_use_hash: true
@@ -767,7 +746,7 @@ services:
           keepalive_expiry: 10.0
         SETTINGSEOF
 
-        cat > /etc/searxng/limiter.toml << LIMITEREOF
+        cat > /etc/searxng/limiter.toml << 'LIMITEREOF'
         [botdetection.ip_limit]
         link_token = false
 
@@ -787,24 +766,20 @@ services:
     networks:
       - dokploy-network
       - n8n-n8nrunnerpostgresollama-yumfxq
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=dokploy-network
+      - traefik.http.routers.searxng.rule=Host(`search.manixsystems.cloud`)
+      - traefik.http.routers.searxng.entrypoints=websecure
+      - traefik.http.routers.searxng.tls.certresolver=letsencrypt
+      - traefik.http.services.searxng.loadbalancer.server.port=8080
     deploy:
       resources:
         limits:
-          cpus: '0.75'
+          cpus: "0.75"
           memory: 384M
         reservations:
           memory: 128M
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.searxng-web.rule=Host(`${SEARXNG_HOST}`)
-      - traefik.http.routers.searxng-web.entrypoints=web
-      - traefik.http.routers.searxng-web.service=searxng-svc
-      - traefik.http.routers.searxng-web.middlewares=redirect-to-https@file
-      - traefik.http.routers.searxng-websecure.rule=Host(`${SEARXNG_HOST}`)
-      - traefik.http.routers.searxng-websecure.entrypoints=websecure
-      - traefik.http.routers.searxng-websecure.service=searxng-svc
-      - traefik.http.routers.searxng-websecure.tls.certresolver=letsencrypt
-      - traefik.http.services.searxng-svc.loadbalancer.server.port=8080
 
   # ===========================================================================
   # NODE EXPORTER - Host metrics (Prometheus format)
@@ -824,7 +799,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.25'
+          cpus: "0.25"
           memory: 64M
 
 # =============================================================================
@@ -838,12 +813,12 @@ volumes:
   open_webui_data:
   searxng_data:
 
-# =============================================================================
-# NETWORKS
-# =============================================================================
+    # =============================================================================
+    # NETWORKS
+    # =============================================================================
 networks:
   dokploy-network:
     external: true
   n8n-n8nrunnerpostgresollama-yumfxq:
     name: n8n-n8nrunnerpostgresollama-yumfxq
-    external: true
+    driver: bridge
