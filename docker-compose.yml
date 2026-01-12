@@ -99,6 +99,7 @@ services:
       - traefik.docker.network=dokploy-network
       - "traefik.http.routers.n8n-manual-router.rule=Host(`${N8N_HOST}`)"
       - "traefik.http.routers.n8n-manual-router.entrypoints=websecure"
+      - "traefik.http.routers.n8n-manual-router.tls=true"
       - "traefik.http.routers.n8n-manual-router.tls.certresolver=letsencrypt"
       - "traefik.http.routers.n8n-manual-router.service=n8n-manual-service"
       - "traefik.http.services.n8n-manual-service.loadbalancer.server.port=5678"
@@ -566,6 +567,7 @@ services:
       - traefik.docker.network=dokploy-network
       - "traefik.http.routers.supabase-api-manual-router.rule=Host(`supabase-api.manixsystems.cloud`)"
       - "traefik.http.routers.supabase-api-manual-router.entrypoints=websecure"
+      - "traefik.http.routers.supabase-api-manual-router.tls=true"
       - "traefik.http.routers.supabase-api-manual-router.tls.certresolver=letsencrypt"
       - "traefik.http.routers.supabase-api-manual-router.service=supabase-api-manual-service"
       - "traefik.http.services.supabase-api-manual-service.loadbalancer.server.port=8000"
@@ -675,6 +677,7 @@ services:
       - traefik.docker.network=dokploy-network
       - "traefik.http.routers.open-webui-manual-router.rule=Host(`openwebui.manixsystems.cloud`)"
       - "traefik.http.routers.open-webui-manual-router.entrypoints=websecure"
+      - "traefik.http.routers.open-webui-manual-router.tls=true"
       - "traefik.http.routers.open-webui-manual-router.tls.certresolver=letsencrypt"
       - "traefik.http.routers.open-webui-manual-router.service=open-webui-manual-service"
       - "traefik.http.services.open-webui-manual-service.loadbalancer.server.port=8080"
@@ -762,6 +765,7 @@ services:
       - traefik.docker.network=dokploy-network
       - "traefik.http.routers.searxng-manual-router.rule=Host(`search.manixsystems.cloud`)"
       - "traefik.http.routers.searxng-manual-router.entrypoints=websecure"
+      - "traefik.http.routers.searxng-manual-router.tls=true"
       - "traefik.http.routers.searxng-manual-router.tls.certresolver=letsencrypt"
       - "traefik.http.routers.searxng-manual-router.service=searxng-manual-service"
       - "traefik.http.services.searxng-manual-service.loadbalancer.server.port=8080"
