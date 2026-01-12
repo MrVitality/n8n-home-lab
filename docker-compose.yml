@@ -564,7 +564,7 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=dokploy-network
-      - "traefik.http.routers.supabase-api-manual-router.rule=Host(`api.supabase.manixsystems.cloud`)"
+      - "traefik.http.routers.supabase-api-manual-router.rule=Host(`supabase-api.manixsystems.cloud`)"
       - "traefik.http.routers.supabase-api-manual-router.entrypoints=websecure"
       - "traefik.http.routers.supabase-api-manual-router.tls.certresolver=letsencrypt"
       - "traefik.http.routers.supabase-api-manual-router.service=supabase-api-manual-service"
@@ -593,8 +593,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       DEFAULT_ORGANIZATION_NAME: Default Organization
       DEFAULT_PROJECT_NAME: Default Project
-      SUPABASE_URL: https://${SUPABASE_API_HOST}
-      SUPABASE_PUBLIC_URL: https://${SUPABASE_API_HOST}
+      SUPABASE_URL: https://${SUPABASE_API_HOST:-supabase-api.manixsystems.cloud}
+      SUPABASE_PUBLIC_URL: https://${SUPABASE_API_HOST:-supabase-api.manixsystems.cloud}
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
       SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       NEXT_PUBLIC_ENABLE_LOGS: "true"
