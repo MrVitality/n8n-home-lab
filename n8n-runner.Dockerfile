@@ -1,4 +1,2 @@
 FROM n8nio/runners:latest
-USER root
-RUN apk add --no-cache python3 py3-pip
-USER node
+# Python 3.13 is already pre-installed.
