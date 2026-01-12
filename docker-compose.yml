@@ -554,10 +554,13 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=dokploy-network
-      - traefik.http.routers.supabase-api.rule=Host(`api.supabase.manixsystems.cloud`)
-      - traefik.http.routers.supabase-api.entrypoints=websecure
-      - traefik.http.routers.supabase-api.tls.certresolver=letsencrypt
-      - traefik.http.services.supabase-api.loadbalancer.server.port=8000
+      - "traefik.http.routers.supabase-api-manual.rule=Host(`api.supabase.manixsystems.cloud`)"
+      - "traefik.http.routers.supabase-api-manual.entrypoints=websecure"
+      - "traefik.http.routers.supabase-api-manual.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.supabase-api-manual.service=supabase-api-svc"
+      - "traefik.http.services.supabase-api-svc.loadbalancer.server.port=8000"
+      - "traefik.http.routers.supabase-api-manual.middlewares=supabase-api-headers"
+      - "traefik.http.middlewares.supabase-api-headers.headers.sslproxyheaders.X-Forwarded-Proto=https"
     deploy:
       resources:
         limits:
@@ -600,11 +603,13 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=dokploy-network"
-      - "traefik.http.routers.supabase-studio.rule=Host(`supabase.manixsystems.cloud`)"
-      - "traefik.http.routers.supabase-studio.entrypoints=websecure"
-      - "traefik.http.routers.supabase-studio.tls.certresolver=letsencrypt"
-      - "traefik.http.services.supabase-studio.loadbalancer.server.port=3000"
-      - "traefik.http.routers.supabase-studio.middlewares=supabase-studio-headers"
+      - "traefik.http.routers.supabase-studio-manual.rule=Host(`supabase.manixsystems.cloud`)"
+      - "traefik.http.routers.supabase-studio-manual.entrypoints=websecure"
+      - "traefik.http.routers.supabase-studio-manual.tls=true"
+      - "traefik.http.routers.supabase-studio-manual.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.supabase-studio-manual.service=supabase-studio-svc"
+      - "traefik.http.services.supabase-studio-svc.loadbalancer.server.port=3000"
+      - "traefik.http.routers.supabase-studio-manual.middlewares=supabase-studio-headers"
       - "traefik.http.middlewares.supabase-studio-headers.headers.sslproxyheaders.X-Forwarded-Proto=https"
       - "traefik.http.middlewares.supabase-studio-headers.headers.stsSeconds=31536000"
       - "traefik.http.middlewares.supabase-studio-headers.headers.browserXssFilter=true"
@@ -658,10 +663,11 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=dokploy-network
-      - traefik.http.routers.open-webui.rule=Host(`openwebui.manixsystems.cloud`)
-      - traefik.http.routers.open-webui.entrypoints=websecure
-      - traefik.http.routers.open-webui.tls.certresolver=letsencrypt
-      - traefik.http.services.open-webui.loadbalancer.server.port=8080
+      - "traefik.http.routers.open-webui-manual.rule=Host(`openwebui.manixsystems.cloud`)"
+      - "traefik.http.routers.open-webui-manual.entrypoints=websecure"
+      - "traefik.http.routers.open-webui-manual.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.open-webui-manual.service=open-webui-svc"
+      - "traefik.http.services.open-webui-svc.loadbalancer.server.port=8080"
     deploy:
       resources:
         limits:
@@ -744,10 +750,11 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=dokploy-network
-      - traefik.http.routers.searxng.rule=Host(`search.manixsystems.cloud`)
-      - traefik.http.routers.searxng.entrypoints=websecure
-      - traefik.http.routers.searxng.tls.certresolver=letsencrypt
-      - traefik.http.services.searxng.loadbalancer.server.port=8080
+      - "traefik.http.routers.searxng-manual.rule=Host(`search.manixsystems.cloud`)"
+      - "traefik.http.routers.searxng-manual.entrypoints=websecure"
+      - "traefik.http.routers.searxng-manual.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.searxng-manual.service=searxng-svc"
+      - "traefik.http.services.searxng-svc.loadbalancer.server.port=8080"
     deploy:
       resources:
         limits:
