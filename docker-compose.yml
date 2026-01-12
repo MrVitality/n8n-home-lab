@@ -43,8 +43,8 @@ services:
     restart: unless-stopped
     <<: *security-opts
     logging: *default-logging
-    # ports:
-    #   - "5678:5678"
+    ports:
+      - "5678:5678"
     environment:
       - N8N_HOST=${N8N_HOST}
       - N8N_PORT=5678
@@ -97,12 +97,12 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=dokploy-network
-      - "traefik.http.routers.n8n-router.rule=Host(`${N8N_HOST}`)"
-      - "traefik.http.routers.n8n-router.entrypoints=websecure"
-      - "traefik.http.routers.n8n-router.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.n8n-router.service=n8n-service"
-      - "traefik.http.services.n8n-service.loadbalancer.server.port=5678"
-      - "traefik.http.routers.n8n-router.middlewares=n8n-headers"
+      - "traefik.http.routers.n8n-manual-router.rule=Host(`${N8N_HOST}`)"
+      - "traefik.http.routers.n8n-manual-router.entrypoints=websecure"
+      - "traefik.http.routers.n8n-manual-router.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.n8n-manual-router.service=n8n-manual-service"
+      - "traefik.http.services.n8n-manual-service.loadbalancer.server.port=5678"
+      - "traefik.http.routers.n8n-manual-router.middlewares=n8n-headers"
       - "traefik.http.middlewares.n8n-headers.headers.sslproxyheaders.X-Forwarded-Proto=https"
     deploy:
       resources:
@@ -454,8 +454,8 @@ services:
   supabase-kong:
     image: kong:2.8.1
     restart: unless-stopped
-    # ports:
-    #   - "8000:8000"
+    ports:
+      - "8000:8000"
     logging: *default-logging
     user: root
     ulimits:
@@ -564,12 +564,12 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=dokploy-network
-      - "traefik.http.routers.supabase-api-router.rule=Host(`api.supabase.manixsystems.cloud`)"
-      - "traefik.http.routers.supabase-api-router.entrypoints=websecure"
-      - "traefik.http.routers.supabase-api-router.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.supabase-api-router.service=supabase-api-service"
-      - "traefik.http.services.supabase-api-service.loadbalancer.server.port=8000"
-      - "traefik.http.routers.supabase-api-router.middlewares=supabase-api-headers"
+      - "traefik.http.routers.supabase-api-manual-router.rule=Host(`api.supabase.manixsystems.cloud`)"
+      - "traefik.http.routers.supabase-api-manual-router.entrypoints=websecure"
+      - "traefik.http.routers.supabase-api-manual-router.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.supabase-api-manual-router.service=supabase-api-manual-service"
+      - "traefik.http.services.supabase-api-manual-service.loadbalancer.server.port=8000"
+      - "traefik.http.routers.supabase-api-manual-router.middlewares=supabase-api-headers"
       - "traefik.http.middlewares.supabase-api-headers.headers.sslproxyheaders.X-Forwarded-Proto=https"
     deploy:
       resources:
@@ -586,8 +586,8 @@ services:
     restart: unless-stopped
     <<: *security-opts
     logging: *default-logging
-    # ports:
-    #   - "3001:3000"
+    ports:
+      - "3001:3000"
     environment:
       STUDIO_PG_META_URL: http://supabase-meta:8080
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -613,13 +613,13 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=dokploy-network"
-      - "traefik.http.routers.supabase-studio-router.rule=Host(`supabase.manixsystems.cloud`)"
-      - "traefik.http.routers.supabase-studio-router.entrypoints=websecure"
-      - "traefik.http.routers.supabase-studio-router.tls=true"
-      - "traefik.http.routers.supabase-studio-router.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.supabase-studio-router.service=supabase-studio-service"
-      - "traefik.http.services.supabase-studio-service.loadbalancer.server.port=3000"
-      - "traefik.http.routers.supabase-studio-router.middlewares=supabase-studio-headers"
+      - "traefik.http.routers.supabase-studio-manual-router.rule=Host(`supabase.manixsystems.cloud`)"
+      - "traefik.http.routers.supabase-studio-manual-router.entrypoints=websecure"
+      - "traefik.http.routers.supabase-studio-manual-router.tls=true"
+      - "traefik.http.routers.supabase-studio-manual-router.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.supabase-studio-manual-router.service=supabase-studio-manual-service"
+      - "traefik.http.services.supabase-studio-manual-service.loadbalancer.server.port=3000"
+      - "traefik.http.routers.supabase-studio-manual-router.middlewares=supabase-studio-headers"
       - "traefik.http.middlewares.supabase-studio-headers.headers.sslproxyheaders.X-Forwarded-Proto=https"
       - "traefik.http.middlewares.supabase-studio-headers.headers.stsSeconds=31536000"
       - "traefik.http.middlewares.supabase-studio-headers.headers.browserXssFilter=true"
@@ -642,8 +642,8 @@ services:
     restart: unless-stopped
     <<: *security-opts
     logging: *default-logging
-    # ports:
-    #   - "8082:8080"
+    ports:
+      - "8082:8080"
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
       - WEBUI_URL=https://openwebui.manixsystems.cloud
@@ -673,11 +673,11 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=dokploy-network
-      - "traefik.http.routers.open-webui-router.rule=Host(`openwebui.manixsystems.cloud`)"
-      - "traefik.http.routers.open-webui-router.entrypoints=websecure"
-      - "traefik.http.routers.open-webui-router.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.open-webui-router.service=open-webui-service"
-      - "traefik.http.services.open-webui-service.loadbalancer.server.port=8080"
+      - "traefik.http.routers.open-webui-manual-router.rule=Host(`openwebui.manixsystems.cloud`)"
+      - "traefik.http.routers.open-webui-manual-router.entrypoints=websecure"
+      - "traefik.http.routers.open-webui-manual-router.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.open-webui-manual-router.service=open-webui-manual-service"
+      - "traefik.http.services.open-webui-manual-service.loadbalancer.server.port=8080"
     deploy:
       resources:
         limits:
@@ -693,8 +693,8 @@ services:
     restart: unless-stopped
     <<: *security-opts
     logging: *default-logging
-    # ports:
-    #   - "8081:8080"
+    ports:
+      - "8081:8080"
     environment:
       - SEARXNG_BASE_URL=https://${SEARXNG_HOST}
       - SEARXNG_SECRET=${SEARXNG_SECRET_KEY}
@@ -760,11 +760,11 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=dokploy-network
-      - "traefik.http.routers.searxng-router.rule=Host(`search.manixsystems.cloud`)"
-      - "traefik.http.routers.searxng-router.entrypoints=websecure"
-      - "traefik.http.routers.searxng-router.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.searxng-router.service=searxng-service"
-      - "traefik.http.services.searxng-service.loadbalancer.server.port=8080"
+      - "traefik.http.routers.searxng-manual-router.rule=Host(`search.manixsystems.cloud`)"
+      - "traefik.http.routers.searxng-manual-router.entrypoints=websecure"
+      - "traefik.http.routers.searxng-manual-router.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.searxng-manual-router.service=searxng-manual-service"
+      - "traefik.http.services.searxng-manual-service.loadbalancer.server.port=8080"
     deploy:
       resources:
         limits:
