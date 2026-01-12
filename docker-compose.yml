@@ -604,6 +604,14 @@ services:
       - "traefik.http.routers.supabase-studio.entrypoints=websecure"
       - "traefik.http.routers.supabase-studio.tls.certresolver=letsencrypt"
       - "traefik.http.services.supabase-studio.loadbalancer.server.port=3000"
+      - "traefik.http.routers.supabase-studio.middlewares=supabase-studio-headers"
+      - "traefik.http.middlewares.supabase-studio-headers.headers.sslproxyheaders.X-Forwarded-Proto=https"
+      - "traefik.http.middlewares.supabase-studio-headers.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.supabase-studio-headers.headers.browserXssFilter=true"
+      - "traefik.http.middlewares.supabase-studio-headers.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.supabase-studio-headers.headers.forceSTSHeader=true"
+      - "traefik.http.middlewares.supabase-studio-headers.headers.stsPreload=true"
+      - "traefik.http.middlewares.supabase-studio-headers.headers.stsIncludeSubdomains=true"
     deploy:
       resources:
         limits:
