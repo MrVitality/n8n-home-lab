@@ -105,9 +105,7 @@ services:
   # N8N WORKER - Processes queued workflow executions
   # ===========================================================================
   n8n-worker:
-    build:
-      context: .
-      dockerfile: n8n-worker.Dockerfile
+    image: n8nio/n8n:latest
     restart: unless-stopped
     <<: *security-opts
     logging: *default-logging
@@ -781,9 +779,9 @@ volumes:
   redis_storage:
   open_webui_data:
   searxng_data:
-# =============================================================================
-# NETWORKS
-# =============================================================================
+    # =============================================================================
+    # NETWORKS
+    # =============================================================================
 networks:
   dokploy-network:
     external: true
