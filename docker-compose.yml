@@ -502,7 +502,7 @@ services:
                     - admin
                     - anon
           - name: rest-v1
-            url: http://supabase-rest:3000/
+            url: http://supabase-rest:8000/
             routes:
               - name: rest-v1-all
                 strip_path: true
