@@ -1,40 +1,77 @@
 # =============================================================================
-# COMPLETE DOCKER COMPOSE - n8n + Supabase + Ollama + SearXNG Stack
+# DOCKER COMPOSE - Localhost-Only Secure VPS Setup
 # =============================================================================
 #
+# All ports bound to 127.0.0.1 - Access via SSH tunneling
 # Optimized for: 4 vCPU / 16GB RAM / 200GB NVMe
-# Last updated: 2026-01-11
 #
-# TOTAL MEMORY BUDGET: ~14GB (leaves ~2GB for OS/buffers)
+# ACCESS METHOD: SSH Port Forwarding
+# Example: ssh -L 5678:localhost:5678 -L 3001:localhost:3001 user@your-vps
 #
-# MEMORY ALLOCATION:
-#   - Ollama:         5120MB (reduced to allow more for Open WebUI)
-#   - PostgreSQL:     2048MB (2GB shared_buffers + overhead)
-#   - Open WebUI:     2048MB (increased for RAG embedding model)
-#   - n8n main:       1536MB
-#   - n8n worker:     1024MB
-#   - n8n runner:      768MB
-#   - Supabase Studio: 768MB
-#   - Kong:            512MB
-#   - Redis:           384MB
-#   - SearXNG:         384MB
-#   - PostgREST:       192MB
-#   - Auth:            192MB
-#   - Meta:            192MB
-#   - Node Exporter:    64MB
-#   -----------------
-#   TOTAL:          ~14.2GB
+# SERVICE PORTS (localhost only):
+#   - n8n:              5678
+#   - Supabase Studio:  3001
+#   - Supabase API:     8000
+#   - Open WebUI:       8082
+#   - SearXNG:          8081
+#   - Ollama:           11434
+#   - PostgreSQL:       5432
+#   - Redis:            6379
+#   - Node Exporter:    9100
+#   - Traefik Dashboard: 8080 (optional)
 #
 # =============================================================================
+
 x-logging: &default-logging
   driver: json-file
   options:
     max-size: "50m"
     max-file: "5"
+
 x-security-opts: &security-opts
   security_opt:
     - no-new-privileges:true
+
 services:
+  # ===========================================================================
+  # TRAEFIK - Reverse Proxy (localhost dashboard, can enable external later)
+  # ===========================================================================
+  traefik:
+    image: traefik:v3.0
+    restart: unless-stopped
+    <<: *security-opts
+    logging: *default-logging
+    command:
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=dokploy-network"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-admin@example.com}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--log.level=INFO"
+    ports:
+      # Bind to localhost only - access via SSH tunnel
+      - "127.0.0.1:80:80"
+      - "127.0.0.1:443:443"
+      - "127.0.0.1:8080:8080"  # Traefik dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_letsencrypt:/letsencrypt
+    networks:
+      - dokploy-network
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          memory: 64M
+
   # ===========================================================================
   # N8N MAIN - Workflow automation UI and webhook handler
   # ===========================================================================
@@ -44,15 +81,16 @@ services:
     <<: *security-opts
     logging: *default-logging
     ports:
-      - "5678:5678"
+      - "127.0.0.1:5678:5678"
     environment:
-      - N8N_HOST=${N8N_HOST}
+      - N8N_HOST=localhost
       - N8N_PORT=5678
-      - N8N_PROTOCOL=https
+      - N8N_PROTOCOL=http
       - NODE_ENV=production
-      - WEBHOOK_URL=https://${N8N_HOST}/
-      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
-      - TZ=${GENERIC_TIMEZONE}
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-UTC}
+      - TZ=${GENERIC_TIMEZONE:-UTC}
+      # Database
       - DB_TYPE=postgresdb
       - DB_POSTGRESDB_HOST=supabase-db
       - DB_POSTGRESDB_PORT=5432
@@ -60,18 +98,22 @@ services:
       - DB_POSTGRESDB_USER=${POSTGRES_USER}
       - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
       - DB_POSTGRESDB_POOL_SIZE=10
+      # Queue mode
       - EXECUTIONS_MODE=queue
       - QUEUE_BULL_REDIS_HOST=redis
       - QUEUE_BULL_REDIS_PORT=6379
       - QUEUE_HEALTH_CHECK_ACTIVE=true
+      # Security
       - N8N_ENCRYPTION_KEY=${ENCRYPTION_KEY}
       - N8N_USER_MANAGEMENT_JWT_SECRET=${N8N_USER_MANAGEMENT_JWT_SECRET}
       - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
+      # Runners
       - N8N_RUNNERS_ENABLED=true
       - N8N_RUNNERS_MODE=external
       - N8N_RUNNERS_AUTH_TOKEN=${N8N_RUNNERS_SECRET}
-      - OLLAMA_HOST=${OLLAMA_HOST}
-      - N8N_PROXY_HOPS=1
+      # Ollama
+      - OLLAMA_HOST=http://ollama:11434
+      # Performance
       - N8N_PAYLOAD_SIZE_MAX=64
       - EXECUTIONS_DATA_PRUNE=true
       - EXECUTIONS_DATA_MAX_AGE=336
@@ -81,7 +123,7 @@ services:
     volumes:
       - n8n_data:/home/node/.n8n
     healthcheck:
-      test: [ "CMD-SHELL", "wget -qO- http://localhost:5678/healthz || exit 1" ]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5678/healthz || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -93,18 +135,13 @@ services:
         condition: service_healthy
     networks:
       - dokploy-network
-      - n8n-n8nrunnerpostgresollama-yumfxq
+      - internal
     labels:
       - traefik.enable=true
       - traefik.docker.network=dokploy-network
-      - "traefik.http.routers.n8n-manual-router.rule=Host(`${N8N_HOST}`)"
-      - "traefik.http.routers.n8n-manual-router.entrypoints=websecure"
-      - "traefik.http.routers.n8n-manual-router.tls=true"
-      - "traefik.http.routers.n8n-manual-router.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.n8n-manual-router.service=n8n-manual-service"
-      - "traefik.http.services.n8n-manual-service.loadbalancer.server.port=5678"
-      - "traefik.http.routers.n8n-manual-router.middlewares=n8n-headers"
-      - "traefik.http.middlewares.n8n-headers.headers.sslproxyheaders.X-Forwarded-Proto=https"
+      - "traefik.http.routers.n8n.rule=Host(`n8n.localhost`)"
+      - "traefik.http.routers.n8n.entrypoints=web"
+      - "traefik.http.services.n8n.loadbalancer.server.port=5678"
     deploy:
       resources:
         limits:
@@ -112,6 +149,7 @@ services:
           memory: 1536M
         reservations:
           memory: 512M
+
   # ===========================================================================
   # N8N WORKER - Processes queued workflow executions
   # ===========================================================================
@@ -122,13 +160,13 @@ services:
     logging: *default-logging
     stop_grace_period: 60s
     environment:
-      - N8N_HOST=${N8N_HOST}
+      - N8N_HOST=localhost
       - N8N_PORT=5678
-      - N8N_PROTOCOL=https
+      - N8N_PROTOCOL=http
       - NODE_ENV=production
-      - WEBHOOK_URL=https://${N8N_HOST}/
-      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
-      - TZ=${GENERIC_TIMEZONE}
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-UTC}
+      - TZ=${GENERIC_TIMEZONE:-UTC}
       - DB_TYPE=postgresdb
       - DB_POSTGRESDB_HOST=supabase-db
       - DB_POSTGRESDB_PORT=5432
@@ -146,14 +184,14 @@ services:
       - N8N_RUNNERS_MODE=external
       - N8N_RUNNERS_AUTH_TOKEN=${N8N_RUNNERS_SECRET}
       - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
-      - OLLAMA_HOST=${OLLAMA_HOST}
+      - OLLAMA_HOST=http://ollama:11434
       - N8N_CONCURRENCY_PRODUCTION_LIMIT=15
       - NODE_OPTIONS=--max-old-space-size=768
     command: worker
     volumes:
       - n8n_data:/home/node/.n8n
     healthcheck:
-      test: [ "CMD-SHELL", "pgrep -f 'n8n worker' || exit 1" ]
+      test: ["CMD-SHELL", "pgrep -f 'n8n worker' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -166,8 +204,7 @@ services:
       supabase-db:
         condition: service_healthy
     networks:
-      - dokploy-network
-      - n8n-n8nrunnerpostgresollama-yumfxq
+      - internal
     deploy:
       resources:
         limits:
@@ -175,6 +212,7 @@ services:
           memory: 1024M
         reservations:
           memory: 384M
+
   # ===========================================================================
   # N8N RUNNER - Sandboxed code execution for Code nodes
   # ===========================================================================
@@ -187,14 +225,14 @@ services:
       - N8N_RUNNERS_TASK_BROKER_URI=http://n8n:5679
       - N8N_RUNNERS_AUTH_TOKEN=${N8N_RUNNERS_SECRET}
       - N8N_ENCRYPTION_KEY=${ENCRYPTION_KEY}
-      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-UTC}
       - N8N_RUNNERS_MAX_CONCURRENCY=20
       - N8N_RUNNERS_TASK_TIMEOUT=180
       - N8N_RUNNERS_HEALTH_CHECK_PORT=5680
       - N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=120
       - NODE_OPTIONS=--max-old-space-size=512
     healthcheck:
-      test: [ "CMD-SHELL", "wget -qO- http://localhost:5680/healthz || exit 1" ]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5680/healthz || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -203,8 +241,7 @@ services:
       n8n:
         condition: service_healthy
     networks:
-      - dokploy-network
-      - n8n-n8nrunnerpostgresollama-yumfxq
+      - internal
     deploy:
       resources:
         limits:
@@ -212,8 +249,9 @@ services:
           memory: 768M
         reservations:
           memory: 256M
+
   # ===========================================================================
-  # OLLAMA - Local LLM inference engine (CPU-only, optimized for 16GB)
+  # OLLAMA - Local LLM inference engine
   # ===========================================================================
   ollama:
     image: ollama/ollama:latest
@@ -221,7 +259,7 @@ services:
     <<: *security-opts
     logging: *default-logging
     ports:
-      - "11435:11434"
+      - "127.0.0.1:11434:11434"
     environment:
       - OLLAMA_NUM_PARALLEL=2
       - OLLAMA_MAX_LOADED_MODELS=2
@@ -230,14 +268,13 @@ services:
     volumes:
       - ollama_storage:/root/.ollama
     healthcheck:
-      test: [ "CMD-SHELL", "ollama list || exit 1" ]
+      test: ["CMD-SHELL", "ollama list || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 30s
     networks:
-      - dokploy-network
-      - n8n-n8nrunnerpostgresollama-yumfxq
+      - internal
     deploy:
       resources:
         limits:
@@ -245,8 +282,7 @@ services:
           memory: 5120M
         reservations:
           memory: 2048M
-    labels:
-      - traefik.enable=false
+
   # ===========================================================================
   # REDIS - Job queue for n8n worker mode
   # ===========================================================================
@@ -255,17 +291,26 @@ services:
     restart: unless-stopped
     <<: *security-opts
     logging: *default-logging
+    ports:
+      - "127.0.0.1:6379:6379"
     command: >
-      redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --appendonly yes --appendfsync everysec --save "" --tcp-keepalive 300 --timeout 0
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --appendfsync everysec
+      --save ""
+      --tcp-keepalive 300
+      --timeout 0
     volumes:
       - redis_storage:/data
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - n8n-n8nrunnerpostgresollama-yumfxq
+      - internal
     deploy:
       resources:
         limits:
@@ -273,14 +318,17 @@ services:
           memory: 384M
         reservations:
           memory: 128M
+
   # ===========================================================================
-  # SUPABASE DATABASE - PostgreSQL 15 (optimized for 16GB RAM)
+  # SUPABASE DATABASE - PostgreSQL 15
   # ===========================================================================
   supabase-db:
     image: supabase/postgres:15.6.1.145
     hostname: supabase-db
     restart: unless-stopped
     logging: *default-logging
+    ports:
+      - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -332,12 +380,12 @@ services:
     volumes:
       - supabase_db_data:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -h localhost -U ${POSTGRES_USER}" ]
+      test: ["CMD-SHELL", "pg_isready -h localhost -U ${POSTGRES_USER}"]
       interval: 5s
       timeout: 5s
       retries: 10
     networks:
-      - n8n-n8nrunnerpostgresollama-yumfxq
+      - internal
     deploy:
       resources:
         limits:
@@ -345,6 +393,7 @@ services:
           memory: 2048M
         reservations:
           memory: 768M
+
   # ===========================================================================
   # SUPABASE POSTGREST - RESTful API for Postgres
   # ===========================================================================
@@ -367,7 +416,7 @@ services:
       supabase-db:
         condition: service_healthy
     networks:
-      - n8n-n8nrunnerpostgresollama-yumfxq
+      - internal
     deploy:
       resources:
         limits:
@@ -375,6 +424,7 @@ services:
           memory: 192M
         reservations:
           memory: 64M
+
   # ===========================================================================
   # SUPABASE AUTH (GoTrue) - Authentication service
   # ===========================================================================
@@ -386,24 +436,24 @@ services:
     environment:
       GOTRUE_API_HOST: 0.0.0.0
       GOTRUE_API_PORT: "9999"
-      API_EXTERNAL_URL: https://${SUPABASE_API_HOST}
+      API_EXTERNAL_URL: http://localhost:8000
       GOTRUE_DB_DRIVER: postgres
       GOTRUE_DB_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@supabase-db:5432/postgres
-      GOTRUE_SITE_URL: ${SUPABASE_SITE_URL}
+      GOTRUE_SITE_URL: http://localhost:3001
       GOTRUE_URI_ALLOW_LIST: ""
-      GOTRUE_DISABLE_SIGNUP: ${SUPABASE_DISABLE_SIGNUP}
+      GOTRUE_DISABLE_SIGNUP: ${SUPABASE_DISABLE_SIGNUP:-false}
       GOTRUE_JWT_ADMIN_ROLES: service_role
       GOTRUE_JWT_AUD: authenticated
       GOTRUE_JWT_EXP: "3600"
       GOTRUE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
       GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
       GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: "false"
-      GOTRUE_MAILER_AUTOCONFIRM: ${SUPABASE_MAILER_AUTOCONFIRM}
-      GOTRUE_SMTP_HOST: ${SMTP_HOST}
-      GOTRUE_SMTP_PORT: ${SMTP_PORT}
-      GOTRUE_SMTP_USER: ${SMTP_USER}
-      GOTRUE_SMTP_PASS: ${SMTP_PASS}
-      GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_USER}
+      GOTRUE_MAILER_AUTOCONFIRM: ${SUPABASE_MAILER_AUTOCONFIRM:-true}
+      GOTRUE_SMTP_HOST: ${SMTP_HOST:-}
+      GOTRUE_SMTP_PORT: ${SMTP_PORT:-587}
+      GOTRUE_SMTP_USER: ${SMTP_USER:-}
+      GOTRUE_SMTP_PASS: ${SMTP_PASS:-}
+      GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_USER:-}
       GOTRUE_SMTP_MAX_FREQUENCY: 1ns
       GOTRUE_MAILER_URLPATHS_INVITE: /auth/v1/verify
       GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
@@ -414,7 +464,7 @@ services:
       supabase-db:
         condition: service_healthy
     networks:
-      - n8n-n8nrunnerpostgresollama-yumfxq
+      - internal
     deploy:
       resources:
         limits:
@@ -422,6 +472,7 @@ services:
           memory: 192M
         reservations:
           memory: 64M
+
   # ===========================================================================
   # SUPABASE META - Postgres metadata API for Studio
   # ===========================================================================
@@ -441,7 +492,7 @@ services:
       supabase-db:
         condition: service_healthy
     networks:
-      - n8n-n8nrunnerpostgresollama-yumfxq
+      - internal
     deploy:
       resources:
         limits:
@@ -449,6 +500,7 @@ services:
           memory: 192M
         reservations:
           memory: 64M
+
   # ===========================================================================
   # SUPABASE KONG - API Gateway
   # ===========================================================================
@@ -456,7 +508,7 @@ services:
     image: kong:2.8.1
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     logging: *default-logging
     user: root
     ulimits:
@@ -551,7 +603,7 @@ services:
       SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       KONG_MEM_CACHE_SIZE: 128m
     healthcheck:
-      test: [ "CMD", "kong", "health" ]
+      test: ["CMD", "kong", "health"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -561,18 +613,13 @@ services:
         condition: service_healthy
     networks:
       - dokploy-network
-      - n8n-n8nrunnerpostgresollama-yumfxq
+      - internal
     labels:
       - traefik.enable=true
       - traefik.docker.network=dokploy-network
-      - "traefik.http.routers.supabase-api-manual-router.rule=Host(`supabase-api.manixsystems.cloud`)"
-      - "traefik.http.routers.supabase-api-manual-router.entrypoints=websecure"
-      - "traefik.http.routers.supabase-api-manual-router.tls=true"
-      - "traefik.http.routers.supabase-api-manual-router.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.supabase-api-manual-router.service=supabase-api-manual-service"
-      - "traefik.http.services.supabase-api-manual-service.loadbalancer.server.port=8000"
-      - "traefik.http.routers.supabase-api-manual-router.middlewares=supabase-api-headers"
-      - "traefik.http.middlewares.supabase-api-headers.headers.sslproxyheaders.X-Forwarded-Proto=https"
+      - "traefik.http.routers.supabase-api.rule=Host(`supabase-api.localhost`)"
+      - "traefik.http.routers.supabase-api.entrypoints=web"
+      - "traefik.http.services.supabase-api.loadbalancer.server.port=8000"
     deploy:
       resources:
         limits:
@@ -580,6 +627,7 @@ services:
           memory: 512M
         reservations:
           memory: 192M
+
   # ===========================================================================
   # SUPABASE STUDIO - Admin dashboard
   # ===========================================================================
@@ -589,14 +637,14 @@ services:
     <<: *security-opts
     logging: *default-logging
     ports:
-      - "3001:3000"
+      - "127.0.0.1:3001:3000"
     environment:
       STUDIO_PG_META_URL: http://supabase-meta:8080
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       DEFAULT_ORGANIZATION_NAME: Default Organization
       DEFAULT_PROJECT_NAME: Default Project
-      SUPABASE_URL: https://${SUPABASE_API_HOST:-supabase-api.manixsystems.cloud}
-      SUPABASE_PUBLIC_URL: https://${SUPABASE_API_HOST:-supabase-api.manixsystems.cloud}
+      SUPABASE_URL: http://localhost:8000
+      SUPABASE_PUBLIC_URL: http://localhost:8000
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
       SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       NEXT_PUBLIC_ENABLE_LOGS: "true"
@@ -605,30 +653,19 @@ services:
       supabase-db:
         condition: service_healthy
     healthcheck:
-      test: [ "CMD", "true" ]
+      test: ["CMD", "true"]
       interval: 30s
       timeout: 5s
       retries: 3
     networks:
       - dokploy-network
-      - n8n-n8nrunnerpostgresollama-yumfxq
+      - internal
     labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=dokploy-network"
-      - "traefik.http.routers.supabase-studio-manual-router.rule=Host(`supabase.manixsystems.cloud`)"
-      - "traefik.http.routers.supabase-studio-manual-router.entrypoints=websecure"
-      - "traefik.http.routers.supabase-studio-manual-router.tls=true"
-      - "traefik.http.routers.supabase-studio-manual-router.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.supabase-studio-manual-router.service=supabase-studio-manual-service"
-      - "traefik.http.services.supabase-studio-manual-service.loadbalancer.server.port=3000"
-      - "traefik.http.routers.supabase-studio-manual-router.middlewares=supabase-studio-headers"
-      - "traefik.http.middlewares.supabase-studio-headers.headers.sslproxyheaders.X-Forwarded-Proto=https"
-      - "traefik.http.middlewares.supabase-studio-headers.headers.stsSeconds=31536000"
-      - "traefik.http.middlewares.supabase-studio-headers.headers.browserXssFilter=true"
-      - "traefik.http.middlewares.supabase-studio-headers.headers.contentTypeNosniff=true"
-      - "traefik.http.middlewares.supabase-studio-headers.headers.forceSTSHeader=true"
-      - "traefik.http.middlewares.supabase-studio-headers.headers.stsPreload=true"
-      - "traefik.http.middlewares.supabase-studio-headers.headers.stsIncludeSubdomains=true"
+      - traefik.enable=true
+      - traefik.docker.network=dokploy-network
+      - "traefik.http.routers.supabase-studio.rule=Host(`supabase.localhost`)"
+      - "traefik.http.routers.supabase-studio.entrypoints=web"
+      - "traefik.http.services.supabase-studio.loadbalancer.server.port=3000"
     deploy:
       resources:
         limits:
@@ -636,6 +673,7 @@ services:
           memory: 768M
         reservations:
           memory: 256M
+
   # ===========================================================================
   # OPEN WEBUI - Chat interface for Ollama
   # ===========================================================================
@@ -645,10 +683,10 @@ services:
     <<: *security-opts
     logging: *default-logging
     ports:
-      - "8082:8080"
+      - "127.0.0.1:8082:8080"
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
-      - WEBUI_URL=https://openwebui.manixsystems.cloud
+      - WEBUI_URL=http://localhost:8082
       - WEBUI_SECRET_KEY=${OPENWEBUI_SECRET_KEY}
       - ENABLE_SIGNUP=true
       - ENABLE_LOGIN_FORM=true
@@ -661,7 +699,7 @@ services:
     volumes:
       - open_webui_data:/app/backend/data
     healthcheck:
-      test: [ "CMD-SHELL", "curl -f http://localhost:8080/health || exit 1" ]
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -671,16 +709,13 @@ services:
         condition: service_healthy
     networks:
       - dokploy-network
-      - n8n-n8nrunnerpostgresollama-yumfxq
+      - internal
     labels:
       - traefik.enable=true
       - traefik.docker.network=dokploy-network
-      - "traefik.http.routers.open-webui-manual-router.rule=Host(`openwebui.manixsystems.cloud`)"
-      - "traefik.http.routers.open-webui-manual-router.entrypoints=websecure"
-      - "traefik.http.routers.open-webui-manual-router.tls=true"
-      - "traefik.http.routers.open-webui-manual-router.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.open-webui-manual-router.service=open-webui-manual-service"
-      - "traefik.http.services.open-webui-manual-service.loadbalancer.server.port=8080"
+      - "traefik.http.routers.openwebui.rule=Host(`openwebui.localhost`)"
+      - "traefik.http.routers.openwebui.entrypoints=web"
+      - "traefik.http.services.openwebui.loadbalancer.server.port=8080"
     deploy:
       resources:
         limits:
@@ -688,6 +723,7 @@ services:
           memory: 2048M
         reservations:
           memory: 512M
+
   # ===========================================================================
   # SEARXNG - Privacy-respecting metasearch engine
   # ===========================================================================
@@ -697,9 +733,9 @@ services:
     <<: *security-opts
     logging: *default-logging
     ports:
-      - "8081:8080"
+      - "127.0.0.1:8081:8080"
     environment:
-      - SEARXNG_BASE_URL=https://${SEARXNG_HOST}
+      - SEARXNG_BASE_URL=http://localhost:8081
       - SEARXNG_SECRET=${SEARXNG_SECRET_KEY}
     command:
       - /bin/sh
@@ -752,23 +788,20 @@ services:
     volumes:
       - searxng_data:/var/cache/searxng
     healthcheck:
-      test: [ "CMD-SHELL", "wget -qO- http://localhost:8080/healthz || exit 1" ]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 30s
     networks:
       - dokploy-network
-      - n8n-n8nrunnerpostgresollama-yumfxq
+      - internal
     labels:
       - traefik.enable=true
       - traefik.docker.network=dokploy-network
-      - "traefik.http.routers.searxng-manual-router.rule=Host(`search.manixsystems.cloud`)"
-      - "traefik.http.routers.searxng-manual-router.entrypoints=websecure"
-      - "traefik.http.routers.searxng-manual-router.tls=true"
-      - "traefik.http.routers.searxng-manual-router.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.searxng-manual-router.service=searxng-manual-service"
-      - "traefik.http.services.searxng-manual-service.loadbalancer.server.port=8080"
+      - "traefik.http.routers.searxng.rule=Host(`search.localhost`)"
+      - "traefik.http.routers.searxng.entrypoints=web"
+      - "traefik.http.services.searxng.loadbalancer.server.port=8080"
     deploy:
       resources:
         limits:
@@ -776,6 +809,7 @@ services:
           memory: 384M
         reservations:
           memory: 128M
+
   # ===========================================================================
   # NODE EXPORTER - Host metrics (Prometheus format)
   # ===========================================================================
@@ -784,18 +818,22 @@ services:
     restart: unless-stopped
     <<: *security-opts
     logging: *default-logging
+    ports:
+      - "127.0.0.1:9100:9100"
     command:
       - '--path.rootfs=/host'
       - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+      - '--web.listen-address=:9100'
     volumes:
       - /:/host:ro,rslave
     networks:
-      - n8n-n8nrunnerpostgresollama-yumfxq
+      - internal
     deploy:
       resources:
         limits:
           cpus: "0.25"
           memory: 64M
+
 # =============================================================================
 # VOLUMES
 # =============================================================================
@@ -806,11 +844,14 @@ volumes:
   redis_storage:
   open_webui_data:
   searxng_data:
-    # =============================================================================
-    # NETWORKS
-    # =============================================================================
+  traefik_letsencrypt:
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
 networks:
   dokploy-network:
     external: true
-  n8n-n8nrunnerpostgresollama-yumfxq:
+  internal:
     driver: bridge
+    internal: true  # No external access - containers only
