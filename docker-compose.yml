@@ -3,6 +3,7 @@
 # =============================================================================
 #
 # All ports bound to 127.0.0.1 - Access via SSH tunneling
+# Uses Dokploy's existing Traefik (no separate Traefik instance)
 # Optimized for: 4 vCPU / 16GB RAM / 200GB NVMe
 #
 # ACCESS METHOD: SSH Port Forwarding
@@ -18,7 +19,6 @@
 #   - PostgreSQL:       5432
 #   - Redis:            6379
 #   - Node Exporter:    9100
-#   - Traefik Dashboard: 8080 (optional)
 #
 # =============================================================================
 
@@ -33,45 +33,6 @@ x-security-opts: &security-opts
     - no-new-privileges:true
 
 services:
-  # ===========================================================================
-  # TRAEFIK - Reverse Proxy (localhost dashboard, can enable external later)
-  # ===========================================================================
-  traefik:
-    image: traefik:v3.0
-    restart: unless-stopped
-    <<: *security-opts
-    logging: *default-logging
-    command:
-      - "--api.dashboard=true"
-      - "--api.insecure=true"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--providers.docker.network=dokploy-network"
-      - "--entrypoints.web.address=:80"
-      - "--entrypoints.websecure.address=:443"
-      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
-      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
-      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-admin@example.com}"
-      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
-      - "--log.level=INFO"
-    ports:
-      # Bind to localhost only - access via SSH tunnel
-      - "127.0.0.1:80:80"
-      - "127.0.0.1:443:443"
-      - "127.0.0.1:8080:8080"  # Traefik dashboard
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - traefik_letsencrypt:/letsencrypt
-    networks:
-      - dokploy-network
-    deploy:
-      resources:
-        limits:
-          cpus: "0.5"
-          memory: 256M
-        reservations:
-          memory: 64M
-
   # ===========================================================================
   # N8N MAIN - Workflow automation UI and webhook handler
   # ===========================================================================
@@ -137,11 +98,7 @@ services:
       - dokploy-network
       - internal
     labels:
-      - traefik.enable=true
-      - traefik.docker.network=dokploy-network
-      - "traefik.http.routers.n8n.rule=Host(`n8n.localhost`)"
-      - "traefik.http.routers.n8n.entrypoints=web"
-      - "traefik.http.services.n8n.loadbalancer.server.port=5678"
+      - traefik.enable=false
     deploy:
       resources:
         limits:
@@ -615,11 +572,7 @@ services:
       - dokploy-network
       - internal
     labels:
-      - traefik.enable=true
-      - traefik.docker.network=dokploy-network
-      - "traefik.http.routers.supabase-api.rule=Host(`supabase-api.localhost`)"
-      - "traefik.http.routers.supabase-api.entrypoints=web"
-      - "traefik.http.services.supabase-api.loadbalancer.server.port=8000"
+      - traefik.enable=false
     deploy:
       resources:
         limits:
@@ -661,11 +614,7 @@ services:
       - dokploy-network
       - internal
     labels:
-      - traefik.enable=true
-      - traefik.docker.network=dokploy-network
-      - "traefik.http.routers.supabase-studio.rule=Host(`supabase.localhost`)"
-      - "traefik.http.routers.supabase-studio.entrypoints=web"
-      - "traefik.http.services.supabase-studio.loadbalancer.server.port=3000"
+      - traefik.enable=false
     deploy:
       resources:
         limits:
@@ -711,11 +660,7 @@ services:
       - dokploy-network
       - internal
     labels:
-      - traefik.enable=true
-      - traefik.docker.network=dokploy-network
-      - "traefik.http.routers.openwebui.rule=Host(`openwebui.localhost`)"
-      - "traefik.http.routers.openwebui.entrypoints=web"
-      - "traefik.http.services.openwebui.loadbalancer.server.port=8080"
+      - traefik.enable=false
     deploy:
       resources:
         limits:
@@ -797,11 +742,7 @@ services:
       - dokploy-network
       - internal
     labels:
-      - traefik.enable=true
-      - traefik.docker.network=dokploy-network
-      - "traefik.http.routers.searxng.rule=Host(`search.localhost`)"
-      - "traefik.http.routers.searxng.entrypoints=web"
-      - "traefik.http.services.searxng.loadbalancer.server.port=8080"
+      - traefik.enable=false
     deploy:
       resources:
         limits:
@@ -844,7 +785,6 @@ volumes:
   redis_storage:
   open_webui_data:
   searxng_data:
-  traefik_letsencrypt:
 
 # =============================================================================
 # NETWORKS
