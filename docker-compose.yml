@@ -333,9 +333,10 @@ services:
       - supabase_db_data:/var/lib/postgresql/data
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -h localhost -U ${POSTGRES_USER}" ]
-      interval: 5s
+      interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 30
+      start_period: 60s
     networks:
       - n8n-n8nrunnerpostgresollama-yumfxq
     deploy:
