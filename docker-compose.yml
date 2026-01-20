@@ -46,11 +46,11 @@ services:
     ports:
       - "127.0.0.1:5678:5678"
     environment:
-      - N8N_HOST=${N8N_HOST}
+      - N8N_HOST=localhost
       - N8N_PORT=5678
-      - N8N_PROTOCOL=https
+      - N8N_PROTOCOL=http
       - NODE_ENV=production
-      - WEBHOOK_URL=https://${N8N_HOST}/
+      - WEBHOOK_URL=http://localhost:5678/
       - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
       - TZ=${GENERIC_TIMEZONE}
       - DB_TYPE=postgresdb
@@ -94,17 +94,7 @@ services:
     networks:
       - dokploy-network
       - n8n-n8nrunnerpostgresollama-yumfxq
-    labels:
-      - traefik.enable=true
-      - traefik.docker.network=dokploy-network
-      - "traefik.http.routers.n8n-manual-router.rule=Host(`${N8N_HOST}`)"
-      - "traefik.http.routers.n8n-manual-router.entrypoints=websecure"
-      - "traefik.http.routers.n8n-manual-router.tls=true"
-      - "traefik.http.routers.n8n-manual-router.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.n8n-manual-router.service=n8n-manual-service"
-      - "traefik.http.services.n8n-manual-service.loadbalancer.server.port=5678"
-      - "traefik.http.routers.n8n-manual-router.middlewares=n8n-headers"
-      - "traefik.http.middlewares.n8n-headers.headers.sslproxyheaders.X-Forwarded-Proto=https"
+
     deploy:
       resources:
         limits:
@@ -122,11 +112,11 @@ services:
     logging: *default-logging
     stop_grace_period: 60s
     environment:
-      - N8N_HOST=${N8N_HOST}
+      - N8N_HOST=localhost
       - N8N_PORT=5678
-      - N8N_PROTOCOL=https
+      - N8N_PROTOCOL=http
       - NODE_ENV=production
-      - WEBHOOK_URL=https://${N8N_HOST}/
+      - WEBHOOK_URL=http://localhost:5678/
       - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
       - TZ=${GENERIC_TIMEZONE}
       - DB_TYPE=postgresdb
@@ -387,7 +377,7 @@ services:
     environment:
       GOTRUE_API_HOST: 0.0.0.0
       GOTRUE_API_PORT: "9999"
-      API_EXTERNAL_URL: https://${SUPABASE_API_HOST}
+      API_EXTERNAL_URL: http://localhost:8000
       GOTRUE_DB_DRIVER: postgres
       GOTRUE_DB_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@supabase-db:5432/postgres
       GOTRUE_SITE_URL: ${SUPABASE_SITE_URL}
@@ -563,17 +553,7 @@ services:
     networks:
       - dokploy-network
       - n8n-n8nrunnerpostgresollama-yumfxq
-    labels:
-      - traefik.enable=true
-      - traefik.docker.network=dokploy-network
-      - "traefik.http.routers.supabase-api-manual-router.rule=Host(`supabase-api.manixsystems.cloud`)"
-      - "traefik.http.routers.supabase-api-manual-router.entrypoints=websecure"
-      - "traefik.http.routers.supabase-api-manual-router.tls=true"
-      - "traefik.http.routers.supabase-api-manual-router.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.supabase-api-manual-router.service=supabase-api-manual-service"
-      - "traefik.http.services.supabase-api-manual-service.loadbalancer.server.port=8000"
-      - "traefik.http.routers.supabase-api-manual-router.middlewares=supabase-api-headers"
-      - "traefik.http.middlewares.supabase-api-headers.headers.sslproxyheaders.X-Forwarded-Proto=https"
+
     deploy:
       resources:
         limits:
@@ -596,8 +576,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       DEFAULT_ORGANIZATION_NAME: Default Organization
       DEFAULT_PROJECT_NAME: Default Project
-      SUPABASE_URL: https://${SUPABASE_API_HOST:-supabase-api.manixsystems.cloud}
-      SUPABASE_PUBLIC_URL: https://${SUPABASE_API_HOST:-supabase-api.manixsystems.cloud}
+      SUPABASE_URL: http://localhost:8000
+      SUPABASE_PUBLIC_URL: http://localhost:8000
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
       SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       NEXT_PUBLIC_ENABLE_LOGS: "true"
@@ -613,23 +593,7 @@ services:
     networks:
       - dokploy-network
       - n8n-n8nrunnerpostgresollama-yumfxq
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=dokploy-network"
-      - "traefik.http.routers.supabase-studio-manual-router.rule=Host(`supabase.manixsystems.cloud`)"
-      - "traefik.http.routers.supabase-studio-manual-router.entrypoints=websecure"
-      - "traefik.http.routers.supabase-studio-manual-router.tls=true"
-      - "traefik.http.routers.supabase-studio-manual-router.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.supabase-studio-manual-router.service=supabase-studio-manual-service"
-      - "traefik.http.services.supabase-studio-manual-service.loadbalancer.server.port=3000"
-      - "traefik.http.routers.supabase-studio-manual-router.middlewares=supabase-studio-headers"
-      - "traefik.http.middlewares.supabase-studio-headers.headers.sslproxyheaders.X-Forwarded-Proto=https"
-      - "traefik.http.middlewares.supabase-studio-headers.headers.stsSeconds=31536000"
-      - "traefik.http.middlewares.supabase-studio-headers.headers.browserXssFilter=true"
-      - "traefik.http.middlewares.supabase-studio-headers.headers.contentTypeNosniff=true"
-      - "traefik.http.middlewares.supabase-studio-headers.headers.forceSTSHeader=true"
-      - "traefik.http.middlewares.supabase-studio-headers.headers.stsPreload=true"
-      - "traefik.http.middlewares.supabase-studio-headers.headers.stsIncludeSubdomains=true"
+
     deploy:
       resources:
         limits:
@@ -649,7 +613,7 @@ services:
       - "127.0.0.1:8082:8080"
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
-      - WEBUI_URL=https://openwebui.manixsystems.cloud
+      - WEBUI_URL=http://localhost:8082
       - WEBUI_SECRET_KEY=${OPENWEBUI_SECRET_KEY}
       - ENABLE_SIGNUP=true
       - ENABLE_LOGIN_FORM=true
@@ -673,15 +637,7 @@ services:
     networks:
       - dokploy-network
       - n8n-n8nrunnerpostgresollama-yumfxq
-    labels:
-      - traefik.enable=true
-      - traefik.docker.network=dokploy-network
-      - "traefik.http.routers.open-webui-manual-router.rule=Host(`openwebui.manixsystems.cloud`)"
-      - "traefik.http.routers.open-webui-manual-router.entrypoints=websecure"
-      - "traefik.http.routers.open-webui-manual-router.tls=true"
-      - "traefik.http.routers.open-webui-manual-router.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.open-webui-manual-router.service=open-webui-manual-service"
-      - "traefik.http.services.open-webui-manual-service.loadbalancer.server.port=8080"
+
     deploy:
       resources:
         limits:
@@ -700,7 +656,7 @@ services:
     ports:
       - "127.0.0.1:8081:8080"
     environment:
-      - SEARXNG_BASE_URL=https://${SEARXNG_HOST}
+      - SEARXNG_BASE_URL=http://localhost:8081
       - SEARXNG_SECRET=${SEARXNG_SECRET_KEY}
     command:
       - /bin/sh
@@ -761,15 +717,7 @@ services:
     networks:
       - dokploy-network
       - n8n-n8nrunnerpostgresollama-yumfxq
-    labels:
-      - traefik.enable=true
-      - traefik.docker.network=dokploy-network
-      - "traefik.http.routers.searxng-manual-router.rule=Host(`search.manixsystems.cloud`)"
-      - "traefik.http.routers.searxng-manual-router.entrypoints=websecure"
-      - "traefik.http.routers.searxng-manual-router.tls=true"
-      - "traefik.http.routers.searxng-manual-router.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.searxng-manual-router.service=searxng-manual-service"
-      - "traefik.http.services.searxng-manual-service.loadbalancer.server.port=8080"
+
     deploy:
       resources:
         limits:
